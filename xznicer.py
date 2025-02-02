@@ -5,6 +5,7 @@ import subprocess
 import threading
 
 results = []
+print_lock = threading.Lock()
 
 input_file = ""
 output_file = ""
@@ -26,46 +27,46 @@ for arg in args:
     else:
         input_file = arg
 
-def xznicer_loop(range1, range2, thread):
-    command = f"xz --format=xz -9 --extreme --keep --stdout {input_file} > /tmp/out{thread}.xz --lzma2=preset=9,lc=0,lp=0,pb=0,nice="
-    progress = 0
-    total_steps = range2 - range1
-    if total_steps != 0:
-        tick = 100.0 / total_steps
-    else:
-        tick = 0
+def xznicer_test_nices(nice_values, thread_id):
+    command_template = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={{}} --keep --stdout {input_file} > /tmp/out{thread_id}.xz"
+    total_steps = len(nice_values)
+    if total_steps == 0:
+        return
+    tick = 100.0 / total_steps
+    progress = 0.0
 
-    for i in range(range1, range2):
-        exe = command + str(i)
-        exe += f" && wc -c /tmp/out{thread}.xz && rm /tmp/out{thread}.xz"
-        result = os.popen(exe).read().strip()
-        if result:
-            size = int(result.split(" ")[0])
-            results.append([size, str(i)])
+    for idx, nice in enumerate(nice_values):
+        command = command_template.format(nice)
+        result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode == 0:
+            try:
+                size = os.path.getsize(f"/tmp/out{thread_id}.xz")
+                results.append((size, str(nice)))
+            except OSError as e:
+                print(f"Error accessing file: {e}")
+            finally:
+                os.remove(f"/tmp/out{thread_id}.xz")
         else:
-            print(f"Warning: No output for nice={i}, skipping.")
+            print(f"Warning: 'xz' command failed for nice={nice}, skipping.")
         progress += tick
-        print(f"Thread {thread}: Finding optimal LZMA2-nice-parameter {int(progress)}%", end="\r")
-
-def xznicer_thread(thread_id, range_start, range_end):
-    xznicer_loop(range_start, range_end, thread_id)
+        with print_lock:
+            print(f"Thread {thread_id}: Finding optimal LZMA2-nice-parameter {int(progress)}%", end="\r")
 
 def xznicer():
-    # Define the ranges for each thread
-    total_range = 274 - 4
-    step = total_range // 4
-    ranges = [
-        (4, 4 + step),
-        (4 + step, 4 + 2 * step),
-        (4 + 2 * step, 4 + 3 * step),
-        (4 + 3 * step, 274)
-    ]
-
+    num_cores = os.cpu_count() or 1
+    nice_values = list(range(2, 274))
+    chunk_size = (len(nice_values) + num_cores - 1) // num_cores
     threads = []
-    for i in range(4):
-        t = threading.Thread(target=xznicer_thread, args=(i+1, ranges[i][0], ranges[i][1]))
-        threads.append(t)
-        t.start()
+
+    for i in range(num_cores):
+        start = i * chunk_size
+        end = min(start + chunk_size, len(nice_values))
+        chunk = nice_values[start:end]
+        if not chunk:
+            continue
+        thread = threading.Thread(target=xznicer_test_nices, args=(chunk, i+1))
+        threads.append(thread)
+        thread.start()
 
     for t in threads:
         t.join()
@@ -76,24 +77,21 @@ def xznicer():
         for row in results:
             print(row)
     print("Best choice:")
-    print("nice=" + str(results[0][1]), "Uses " + str(results[0][0]) + " bytes")
-    exe = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={results[0][1]} --keep --stdout {input_file} > {output_file}"
-    print(exe)
-    print(os.popen(exe).read())
+    best = results[0]
+    print(f"nice={best[1]}, Uses {best[0]} bytes")
+    final_command = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={best[1]} --keep --stdout {input_file} > {output_file}"
+    print(final_command)
+    subprocess.run(final_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def main():
-    if input_file == "":
+    if not input_file:
         print("No input file given")
         return
-    elif output_file == "":
+    elif not output_file:
         print("No output file given")
         return
 
-    xznicer_loop_thread = threading.Thread(target=xznicer)
-
-    xznicer_loop_thread.start()
-
-    xznicer_loop_thread.join()
+    xznicer()
 
 if __name__ == "__main__":
     main()
