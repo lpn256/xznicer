@@ -27,6 +27,7 @@ for arg in args:
     else:
         input_file = arg
 
+
 def xznicer_test_nices(nice_values, thread_id):
     command_template = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={{}} --keep --stdout {input_file} > /tmp/out{thread_id}.xz"
     total_steps = len(nice_values)
@@ -51,6 +52,7 @@ def xznicer_test_nices(nice_values, thread_id):
         progress += tick
         with print_lock:
             print(f"Thread {thread_id}: Finding optimal LZMA2-nice-parameter {int(progress)}%", end="\r")
+
 
 def xznicer():
     num_cores = os.cpu_count() or 1
@@ -83,6 +85,7 @@ def xznicer():
     print(final_command)
     subprocess.run(final_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+
 def main():
     if not input_file:
         print("No input file given")
@@ -92,6 +95,7 @@ def main():
         return
 
     xznicer()
+
 
 if __name__ == "__main__":
     main()
