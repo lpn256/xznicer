@@ -2,70 +2,74 @@
 import os
 import sys
 import subprocess
+import threading
 
-results=[]
+results = []
 
+input = ""
+output = ""
 
-input=""
-output=""
-
-args=sys.argv
+args = sys.argv
 
 args.pop(0)
 
-v=False
+v = False
+o = False
 
-o=False
 for arg in args:
-
-    if(arg=="-v"):
-        v=True
-    elif(arg=="-o"):
-        o=True
+    if arg == "-v":
+        v = True
+    elif arg == "-o":
+        o = True
     elif o:
-        output=arg
-        o=False        
+        output = arg
+        o = False
     else:
-        input=arg
+        input = arg
 
+def xznicer_loop(range1, range2, thread):
+    command = f"xz --format=xz -9 --extreme --keep --stdout {input} > /tmp/out{thread}.xz --lzma2=preset=9,lc=0,lp=0,pb=0,nice="
+    progress = 0
+    tick = 100.0 / (range2 - range1)
 
+    for i in range(range1, range2):
+        exe = command + str(i)
+        exe += f" && wc -c /tmp/out{thread}.xz && rm /tmp/out{thread}.xz"
+        result = os.popen(exe).read().strip()
+        if result:
+            size = int(result.split(" ")[0])
+            results.append([size, str(i)])
+        else:
+            print(f"Warning: No output for nice={i}, skipping.", flush=True)
+        progress += tick
+        print(f"Finding optimal LZMA2-nice-parameter {int(progress)}%", end="\r")
 
-def main():
-
-    if input=="":
-        print("No input file given")
-        return
-    elif output=="":
-        print("No output file given")
-        return
-
-
-    command = "xz --format=xz -9 --extreme  --keep --stdout "+input+" > /tmp/out.xz --lzma2=preset=9,lc=0,lp=0,pb=0,nice="
-    progress=0.0
-    tick=100.0/(273.0-4.0)
-
-    for i in range(4, 274):
-        exe=command+str(i)
-        exe+="&& wc -c /tmp/out.xz&&rm /tmp/out.xz"
-        result = os.popen(exe).read()
-        result=int(result.split(" ")[0])
-        results.append([result,str(i)])
-        progress+=tick
-        print("Finding optimal LZMA2-nice-parameter", int(progress),"%",end="\r")
-
+def xznicer1():
+    xznicer_loop(4, 274, 1)
     print("\n")
 
     results.sort(key=lambda x: x[0])
 
-    if(v==True):
+    if v:
         for row in results:
             print(row)
     print("Best choice:")
-    print("nice="+str(results[0][1]), "Uses "+str(results[0][0]) + " bytes")
-    exe="xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice=" +str(results[0][1]) +" --keep --stdout " +input +" > " +output
+    print(f"nice={results[0][1]}, Uses {results[0][0]} bytes")
+    exe = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={results[0][1]} --keep --stdout {input} > {output}"
     print(exe)
     print(os.popen(exe).read())
 
-main()
+def main():
+    if input == "":
+        print("No input file given")
+        return
+    elif output == "":
+        print("No output file given")
+        return
 
+    t1 = threading.Thread(target=xznicer1)
+    t1.start()
+    t1.join()
 
+if __name__ == "__main__":
+    main()
