@@ -6,29 +6,28 @@ import threading
 
 results = []
 
-input = ""
-output = ""
+input_file = ""
+output_file = ""
 
 args = sys.argv
-
 args.pop(0)
 
-v = False
-o = False
+verbose = False
+output_specified = False
 
 for arg in args:
     if arg == "-v":
-        v = True
+        verbose = True
     elif arg == "-o":
-        o = True
-    elif o:
-        output = arg
-        o = False
+        output_specified = True
+    elif output_specified:
+        output_file = arg
+        output_specified = False
     else:
-        input = arg
+        input_file = arg
 
 def xznicer_loop(range1, range2, thread):
-    command = f"xz --format=xz -9 --extreme --keep --stdout {input} > /tmp/out{thread}.xz --lzma2=preset=9,lc=0,lp=0,pb=0,nice="
+    command = f"xz --format=xz -9 --extreme --keep --stdout {input_file} > /tmp/out{thread}.xz --lzma2=preset=9,lc=0,lp=0,pb=0,nice="
     progress = 0
     total_steps = range2 - range1
     if total_steps != 0:
@@ -73,20 +72,20 @@ def xznicer():
 
     results.sort(key=lambda x: x[0])
 
-    if v:
+    if verbose:
         for row in results:
             print(row)
     print("Best choice:")
     print("nice=" + str(results[0][1]), "Uses " + str(results[0][0]) + " bytes")
-    exe = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={results[0][1]} --keep --stdout {input} > {output}"
+    exe = f"xz --format=xz -9 --extreme --lzma2=preset=9,lc=0,lp=0,pb=0,nice={results[0][1]} --keep --stdout {input_file} > {output_file}"
     print(exe)
     print(os.popen(exe).read())
 
 def main():
-    if input == "":
+    if input_file == "":
         print("No input file given")
         return
-    elif output == "":
+    elif output_file == "":
         print("No output file given")
         return
 
