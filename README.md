@@ -4,5 +4,5 @@ This is a brute-force compressor for XZ files in LZMA2 format. Based on nicer.py
 
 # TODO
 
-- Parallel processing
+- Parallel processing on all available cores
 - Possible xzutils C++ port?
